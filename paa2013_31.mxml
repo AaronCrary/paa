@@ -1,0 +1,647 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//	Aaron Crary
+//	OKI Project Application Assitant  xmlns:supportClasses="com.esri.ags.tasks.supportClasses.*"
+//	ArcGIS Viewer for FLEX 3.1
+//	3/2013
+////////////////////////////////////////////////////////////////////////////////
+-->
+<viewer:BaseWidget xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx" 
+				   xmlns:viewer="com.esri.viewer.*" layout="absolute"
+				   xmlns:paa2012="widgets.PAA.*"
+				   xmlns:esri="http://www.esri.com/2008/ags"
+				   xmlns:paa="widgets.paa.*"
+				   initialize="init()">
+	
+	<fx:Declarations>
+		<esri:GeometryService id="geometryService" url="***/Utilities/Geometry/GeometryServer"/>
+		<esri:QueryTask id="queryTaskPaa" url="***/Layers/PAA/MapServer/1"/>
+		<!--<esri:Geoprocessor id="savePaa" url=""/>-->
+		<esri:SimpleLineSymbol id="sls"
+							   width="6"
+							   alpha="1"
+							   color="red"
+							   style="solid"
+							   />
+		<esri:SimpleMarkerSymbol id="sms"
+								 alpha="0"
+								 color="red"
+								 style="circle"
+								 />
+		<esri:FeatureLayer id="paasave"
+						   editsComplete="flayer_editsCompleteHandler(event)"
+						   fault="flayer_faultHandler(event)"
+						   mode="onDemand"
+						   url="***/Layers/paaedits/FeatureServer/0"/>
+		
+	</fx:Declarations>
+	<!--<viewer:states>
+	<s:State name="s1"/>
+	<s:State name="s2"/>
+	</viewer:states>-->
+	
+	<!--<viewer:transitions>
+	<s:Transition autoReverse="true" toState="*">
+	<s:Fade targets="{[s1, s2]}"/>
+	</s:Transition>
+	</viewer:transitions>-->
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.FeatureSet;
+			import com.esri.ags.Graphic;
+			import com.esri.ags.Map;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.esri_internal;
+			import com.esri.ags.events.DrawEvent;
+			import com.esri.ags.events.EditEvent;
+			import com.esri.ags.events.FeatureLayerEvent;
+			import com.esri.ags.events.GeometryServiceEvent;
+			import com.esri.ags.events.GeoprocessorEvent;
+			import com.esri.ags.events.GraphicEvent;
+			import com.esri.ags.events.GraphicsLayerEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.layers.FeatureLayer;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.symbols.Symbol;
+			import com.esri.ags.tasks.GeometryServiceSingleton;
+			import com.esri.ags.tasks.IdentifyTask;
+			import com.esri.ags.tasks.QueryTask;
+			import com.esri.ags.tasks.supportClasses.BufferParameters;
+			import com.esri.ags.tasks.supportClasses.IdentifyParameters;
+			import com.esri.ags.tasks.supportClasses.IdentifyResult;
+			import com.esri.ags.tasks.supportClasses.Query;
+			import com.esri.ags.tasks.supportClasses.RelationParameters;
+			import com.esri.ags.tools.DrawTool;
+			import com.esri.viewer.ViewerContainer;
+			
+			import mx.charts.renderers.DiamondItemRenderer;
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.controls.Image;
+			import mx.events.FlexEvent;
+			import mx.rpc.AsyncResponder;
+			import mx.rpc.Fault;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ObjectUtil;
+			
+			private const ICON_URL:String = "assets/images/";
+			
+			//labels
+			[Bindable]
+			private var textProjectNameLabel:String ="Project Name: ";
+			
+			[Bindable]
+			private var textProjectSponsor:String = "Project Sponsor: ";
+			
+			[Bindable]
+			private var SelectButtonLabel:String = "";
+			
+			[Bindable]
+			private var ClearButtonLabel:String = "";
+			
+			[Bindable] 
+			private var pointLabel:String;
+			
+			//data
+			private var safety:String = "";
+			private var los:String = "";
+			private var adt:String = "";
+			private var truckadt:String = "";
+			private var roadwayclass:String = ""; 
+			
+			private var safetypt:Number = 0;
+			private var lospt:Number = 0;
+			private var adtpt:Number = 0;
+			private var truckadtpt:Number = 0;
+			private var roadwayclasspt:Number = 0; 
+			
+			private var safetymax:Number = 0;
+			private var losmax:Number = 0;
+			private var adtmax:Number = 0;
+			private var truckadtmax:Number = 0;
+			private var roadwayclassmax:Number = 0;
+			
+			private var safetyraw:String = "";
+			private var losraw:String = "";
+			private var adtraw:String = "";
+			private var truckadtraw:String = "";
+			private var roadwayclassraw:String = "";
+			
+			private var disabled:Number = 0;
+			private var elderly:Number = 0; 
+			private var minority:Number = 0;
+			private var poverty:Number = 0; 
+			private var zerocar:Number = 0; 
+			
+			private var disabledt:String = "";
+			private var elderlyt:String = ""; 
+			private var minorityt:String = "";
+			private var povertyt:String = ""; 
+			private var zerocart:String = "";
+			
+			private var disabledmax:Number = 0; 
+			private var elderlymax:Number = 0; 
+			private var minoritymax:Number = 0; 
+			private var povertymax:Number = 0; 
+			private var zerocarmax:Number = 0; 
+			
+			private var disabledtraw:String = "";
+			private var elderlytraw:String = "";
+			private var minoritytraw:String = "";
+			private var povertytraw:String = ""; 
+			private var zerocartraw:String = "";
+			
+			//other
+			private var textDirection:String;
+			private var selectedDrawingIcon:Image;
+			private var lastTool:String;
+			private var identMarkerSymbol:Symbol;
+			private var keepActive:Boolean;
+			private var identifyGeom:Geometry;
+			private var identPicSymbol:Symbol;
+			private var graphicsLayer:GraphicsLayer = new GraphicsLayer();
+			private var gridDataProvider:Object;
+			
+			[Bindable]public var attributesCollection:ArrayCollection = new ArrayCollection();
+			[Bindable]public var graRelationArray1:Array = [];
+			[Bindable]public var combinedGraRelationArray1:Array = [];
+			[Bindable]public var gra1:Graphic;
+			[Bindable]public var combinedGra1:Graphic;
+			[Bindable]public var saveGra:Graphic;
+			[Bindable]public var dataObj:Object;
+			
+			private function init():void
+			{
+				graphicsLayer.name = "PAA Graphics";
+				graphicsLayer.symbol = sls;
+				graphicsLayer.spatialReference = new SpatialReference(102100);
+				graphicsLayer.addEventListener(FlexEvent.HIDE, graphicsLayer_hideHandler);
+				map.addLayer(graphicsLayer);
+				
+				if(configXML)
+				{
+					textDirection = getStyle("direction");
+				}
+				
+
+			}
+			
+			private function graphicsLayer_hideHandler(event:FlexEvent):void
+			{
+				hideInfoWindow();
+			}
+			
+			private function hideInfoWindow():void
+			{
+				if (map.infoWindow.contentOwner &&
+					((map.infoWindow.contentOwner is Graphic && Graphic(map.infoWindow.contentOwner).graphicsLayer === graphicsLayer) || map.infoWindow.contentOwner is Map))
+					map.infoWindow.hide();
+			}
+		
+			
+			private function wTemplate_closeHandler(event:Event):void
+			{
+				graphicsLayer.visible = false;		
+				setMapAction(null, null, null, null); // deactivate PAA Edit Tool
+			}
+			
+			private function wTemplate_openHandler(event:Event):void
+			{
+				if (graphicsLayer)
+				{
+					graphicsLayer.visible = true;
+				}
+			}			
+			
+			private function activateIdentifyTool(event:Event):void
+			{
+				if(ProjectNameTextInput.text == "")
+				{
+					Alert.show("Please add the Name of the project.");
+					return
+				}
+				if(ProjectSponsorTextInput.text == "")
+				{
+					Alert.show("Please add the Sponsor information for the project.");
+					return
+				}
+				else
+				{
+					trace("map point clicked");
+					var status:String = "Status";
+					setMapAction(DrawTool.MAPPOINT,status,null,drawEnd);
+				}
+				
+			}	
+			
+			private function drawEnd(event:DrawEvent):void
+			{
+				var graGeometry:Geometry = event.graphic.geometry;
+				var bufferParameters:BufferParameters = new BufferParameters();
+				bufferParameters.geometries = [graGeometry];
+				bufferParameters.distances = [ 80 ]; 
+				bufferParameters.unit = GeometryService.UNIT_FOOT;
+				bufferParameters.bufferSpatialReference = map.spatialReference;
+				geometryService.buffer(bufferParameters);
+				geometryService.addEventListener(GeometryServiceEvent.BUFFER_COMPLETE, bufferCompleteHandler);
+			}
+			
+			private function doQuery(geom:Geometry):void
+			{
+				try
+				{
+					trace("Query");
+					var query:Query = new Query();
+					var queryTask:QueryTask = queryTaskPaa;
+					query.spatialRelationship = Query.SPATIAL_REL_INTERSECTS;
+					query.geometry = geom;
+					query.returnGeometry = true;
+					query.outFields = ["*"];
+					query.outSpatialReference = map.spatialReference;
+					queryTask.execute(query, new AsyncResponder(onResult, onFault));
+					
+					function onResult(featureSet:FeatureSet, token:Object = null):void
+					{
+						if (featureSet.features.length > 0)
+						{
+							for each (var myGraphic:Graphic in featureSet.features)
+							{
+								gra1 = (featureSet.features[0] as Graphic);
+								//graphicsLayer.add(gra1);
+								geometryService.addEventListener(GeometryServiceEvent.RELATION_COMPLETE, intersectCompleteHandler, false, 0, true);
+								var nog:int = graphicsLayer.numGraphics;
+								if (graphicsLayer.numGraphics > 0)
+								{
+									trace("numgra > 0")
+									combinedGra1 = (graphicsLayer.graphicProvider[0] as Graphic);
+									combinedGra1.geometry.spatialReference = map.spatialReference;
+									//graphicsLayer.add(gra1);
+								}
+									
+								else 
+								{
+									trace("combinedGra1 = gra1")
+									//graphicsLayer.add(gra1);
+									combinedGra1 = gra1;
+								}
+								graRelationArray1.push(gra1.geometry);
+								combinedGraRelationArray1.push(combinedGra1.geometry);
+								var relationParameters:RelationParameters = new RelationParameters();
+								relationParameters.geometries1 = graRelationArray1;
+								relationParameters.geometries2 = combinedGraRelationArray1;
+								relationParameters.spatialRelationship = RelationParameters.SPATIAL_REL_INTERSECTION;
+								geometryService.relation(relationParameters);
+							}
+						}
+						else
+						{
+							Alert.show("No roadways were found", "Try somewhere else");
+						}
+						
+					}
+					function onFault(info:Object, token:Object = null):void
+					{
+						trace("fault")
+						Alert.show(info.faultString + "\n\n" + info.faultDetail, "queryTask fault " + info.faultCode);
+					}
+				}
+				catch (error:Error)
+				{
+					trace("error")
+					Alert.show(error.toString(), "error");
+				}
+				var status:String = "Status";
+				setMapAction(DrawTool.MAPPOINT,status,sms,drawEnd);
+				//graphicsLayer.refresh();
+			}
+			private function bufferCompleteHandler(event:GeometryServiceEvent):void
+			{
+				trace("buffer");
+				doQuery(event.result[0] as Geometry);
+			}
+			
+			private function intersectCompleteHandler(event:GeometryServiceEvent):void
+			{
+				trace("relation");
+				geometryService.removeEventListener(GeometryServiceEvent.RELATION_COMPLETE, intersectCompleteHandler);
+				
+				if(event.result.len == 0)
+				{
+					Alert.show("The selected feature is not connected to previously selected features");
+					return;
+				}
+				
+				//var gra:Graphic = new Graphic();
+				//graphicsLayer.clear();
+				
+				attributesCollection.removeAll();
+				var tempGra1:Object = gra1.attributes; 
+				var tempGra2:Object = combinedGra1.attributes; 
+				if(gra1.attributes.OBJECTID != combinedGra1.attributes.OBJECTID)
+				{
+					losmax = dataObj.lospt;
+					adtmax = dataObj.adtpt;
+					truckadtmax = dataObj.truckadtpt;
+					roadwayclassmax = dataObj.roadwayclasspt;
+					safetymax = dataObj.safetypt;
+					losraw = dataObj.los;
+					adtraw = dataObj.adt;
+					truckadtraw = dataObj.truckadt;
+					roadwayclassraw = dataObj.roadwayclass;
+					safetyraw = dataObj.safety;
+					disabledmax = dataObj.disabledpt;
+					elderlymax = dataObj.elderlypt;
+					minoritymax = dataObj.minoritypt;
+					povertymax = dataObj.povertypt;
+					zerocarmax = dataObj.zerocarpt;
+					disabledtraw = dataObj.disabledt;
+					elderlytraw = dataObj.elderlyt;
+					minoritytraw = dataObj.minorityt;
+					povertytraw = dataObj.povertyt;
+					zerocartraw = dataObj.zerocart;
+					
+					trace("more than one graphic")
+					var temp1:Object = gra1.attributes;
+					//var temp2:Object = combinedGra1.attributes;
+					if(losmax > temp1.lospt)
+					{
+						losmax = gra1.attributes.lospt;
+						losraw = gra1.attributes.los;
+					} 
+					
+					if(adtmax > temp1.adtpt)
+					{
+						adtmax = gra1.attributes.adtpt;
+						adtraw = gra1.attributes.adt;
+					}
+					if(truckadtmax > temp1.truckadtpt)
+					{
+						truckadtmax = gra1.attributes.truckadtpt;
+						truckadtraw = gra1.attributes.truckadt;
+					}
+					if(roadwayclassmax > temp1.roadwayclasspt)
+					{
+						roadwayclassmax = gra1.attributes.roadwayclasspt;
+						roadwayclassraw = gra1.attributes.roadwayclass;
+					}
+					if(safetymax > temp1.safetypt)
+					{
+						safetymax = gra1.attributes.safetypt;
+						safetyraw = gra1.attributes.safety;
+					}
+					//EJ
+					if(disabledmax > temp1.disabledpt)
+					{
+						disabledmax = gra1.attributes.disabled;
+						disabledtraw = gra1.attributes.disabledpt;
+					}
+					if(elderlymax > temp1.elderlypt)
+					{
+						elderlymax = gra1.attributes.elderlypt;
+						elderlytraw = gra1.attributes.elderlyt;
+					}
+					if(minoritymax > temp1.minorityt)
+					{
+						minoritymax = gra1.attributes.minoritypt;
+						minoritytraw = gra1.attributes.minorityt;
+					}
+					if(povertymax > temp1.povertypt)
+					{
+						povertymax = gra1.attributes.povertypt;
+						povertytraw = gra1.attributes.povertyt;
+					}
+					if(zerocarmax > temp1.zerocarpt)
+					{
+						zerocarmax = gra1.attributes.zerocarpt;
+						zerocartraw = gra1.attributes.zerocart;
+					}
+					
+					var obj:Object = {
+						Name: ProjectNameTextInput.text,
+							Sponsor: ProjectSponsorTextInput.text,
+							lospt: losmax,
+							adtpt: adtmax,
+							truckadtpt: truckadtmax,
+							roadwayclasspt: roadwayclassmax,
+							safetypt: safetymax,
+							los: losraw,
+							adt: adtraw,
+							truckadt: truckadtraw,
+							roadwayclass: roadwayclassraw,
+							safety: safetyraw,
+							disabledpt: disabledmax,
+							elderlypt: elderlymax,
+							minoritypt: minoritymax,
+							povertypt: povertymax,
+							zerocarpt: zerocarmax,
+							disabledt: disabledtraw,
+							elderlyt: elderlytraw,
+							minorityt: minoritytraw,
+							povertyt: povertytraw,
+							zerocart: zerocartraw   
+					} 
+					trace("add new values")
+					attributesCollection.addItem(obj);
+								
+				}
+				else
+				{
+					trace("One Graphic")
+					
+					losmax = gra1.attributes.lospt;
+					adtmax = gra1.attributes.adtpt;
+					truckadtmax = gra1.attributes.truckadtpt;
+					roadwayclassmax = gra1.attributes.roadwayclasspt;
+					safetymax = gra1.attributes.safetypt;
+					
+					losraw = gra1.attributes.los;
+					adtraw = gra1.attributes.adt;
+					truckadtraw = gra1.attributes.truckadt;
+					roadwayclassraw = gra1.attributes.roadwayclass;
+					safetyraw = gra1.attributes.safety;
+					
+					disabledmax = gra1.attributes.disabledpt;
+					elderlymax = gra1.attributes.elderlypt;
+					minoritymax = gra1.attributes.minoritypt;
+					povertymax = gra1.attributes.povertypt;
+					zerocarmax = gra1.attributes.zerocarpt;
+					
+					disabledtraw = gra1.attributes.disabledt;
+					elderlytraw = gra1.attributes.elderlyt;
+					minoritytraw = gra1.attributes.minorityt;
+					povertytraw = gra1.attributes.povertyt;
+					zerocartraw = gra1.attributes.zerocart;
+					
+					dataObj ={
+						Name: ProjectNameTextInput.text,
+							Sponsor: ProjectSponsorTextInput.text,
+							lospt: losmax,
+							adtpt: adtmax,
+							truckadtpt: truckadtmax,
+							roadwayclasspt: roadwayclassmax,
+							safetypt: safetymax,
+							los: losraw,
+							adt: adtraw,
+							truckadt: truckadtraw,
+							roadwayclass: roadwayclassraw,
+							safety: safetyraw,
+							disabledpt: disabledmax,
+							elderlypt: elderlymax,
+							minoritypt: minoritymax,
+							povertypt: povertymax,
+							zerocarpt: zerocarmax,
+							disabledt: disabledtraw,
+							elderlyt: elderlytraw,
+							minorityt: minoritytraw,
+							povertyt: povertytraw,
+							zerocart: zerocartraw
+					}
+					/* var obj:Object = dataObj; */
+					attributesCollection.addItem(dataObj);
+					///////////////////////////////////////////
+
+					var pL1:Polyline = (gra1.geometry as Polyline);
+					var pL2:Polyline = (combinedGra1.geometry as Polyline);
+					var arrPoints:Array = pL1.removePath(0);
+					pL2.addPath(arrPoints[0]);
+					var geom:Geometry = (pL2 as Geometry);
+					gra1.geometry = geom;
+				}
+				
+				graphicsLayer.add(gra1);
+				//graphicsLayer.refresh();
+			}
+			
+			private function clear():void
+			{
+				trace("clear");
+				graphicsLayer.clear();
+				ProjectNameTextInput.text = "";
+				attributesCollection.removeAll()
+				setMapAction(null, null, null, null);	
+			}
+			//Edit part
+			private function applyEdits(savePaaGraphics:Graphic):void
+			{
+				if(ProjectNameTextInput.text == "")
+				{
+					Alert.show("Please add the Name of the project.");
+					return
+				}
+				if(ProjectSponsorTextInput.text == "")
+				{
+					Alert.show("Please add the Sponsor information for the project.");
+					return
+				}
+				else
+				{
+					attributesCollection.refresh();
+					var newAtttrs:Object = ObjectUtil.copy(attributesCollection[0]);
+					var screenGra:Graphic = graphicsLayer.graphicProvider[0] as Graphic;
+					var screenPl:Polyline = (screenGra.geometry as Polyline);
+					var savePaaGraphics:Graphic = new Graphic(screenPl, null, newAtttrs);
+					paasave.applyEdits([ savePaaGraphics ], null, null);
+				}
+				
+			} 
+			protected function flayer_faultHandler(event:FaultEvent):void
+			{
+				Alert.show(event.fault.faultString + "\n\n" + event.fault.faultDetail, "FeatureLayer Fault " + event.fault.faultCode);
+				trace("f: " + event.toString());
+			}
+			
+			protected function flayer_editsCompleteHandler(event:FeatureLayerEvent):void
+			{
+				Alert.show("Your project has been saved.", "Thank You!")
+				trace("e: " + event.toString());
+				graphicsLayer.clear();
+				attributesCollection.removeAll();
+				ProjectNameTextInput.text = "";
+				setMapAction(null, null, null, null);
+				trace("clear after save");
+			}
+			
+		]]>
+	</fx:Script>
+	<viewer:WidgetTemplate id="PAA"  width="550" height="410"
+						   closed="wTemplate_closeHandler(event)"
+						   open="wTemplate_openHandler(event)">
+		<viewer:layout>
+			<s:VerticalLayout horizontalAlign="contentJustify" verticalAlign="top"/>
+		</viewer:layout>
+		<s:HGroup id="imageGroup"
+				  width="100%"
+				  gap="10"
+				  horizontalAlign="center">
+			<mx:Image id="iDrawPnt"
+					  name="{DrawTool.MAPPOINT}"
+					  width="40" height="40"
+					  buttonMode="true"
+					  click="{activateIdentifyTool(event)}"
+					  source="widgets/PAA/assets/i_draw.png"
+					  toolTip="Click to start selecting roadways."
+					  useHandCursor="true"/>
+			<mx:Image id="clearBtn" 
+					  name="Clear" 
+					  click="clear()" 
+					  source="widgets/PAA/assets/i_trash2.png"
+					  toolTip="Click to clear your selection."
+					  width="40" height="40"
+					  buttonMode="true"/>
+			<mx:Image id="saveBtn" 
+					  source="widgets/PAA/assets/edit_submit.png"
+					  toolTip="Click to save your project."
+					  width="40" height="40"
+					  buttonMode="true"
+					  name="Save" 
+					  click="applyEdits(saveGra)"/>
+		</s:HGroup>
+		<s:HGroup>
+			<s:Label id="ProjectNameLabel" text="Project Name:"/>
+			<s:TextInput id="ProjectNameTextInput"/>
+		</s:HGroup>
+		<s:HGroup>
+			<s:Label id="ProjectSponsorLabel" text="Project Sponsor:"/>
+			<s:TextInput id="ProjectSponsorTextInput"/>
+		</s:HGroup>
+		<s:Label id="dataLabel" text="Project Data:"/>
+		<mx:DataGrid id="dgResultsPoints" rowCount="1"  dataProvider="{attributesCollection}">
+			<mx:columns>
+				<mx:DataGridColumn dataField="los" headerText="LOS" width="50"/>
+				<mx:DataGridColumn dataField="adt" headerText="ADT" width="50"/>
+				<mx:DataGridColumn dataField="truckadt" headerText="Truck ADT" width="75"/>
+				<mx:DataGridColumn dataField="roadwayclass" headerText="Roadway Class" width="250"/>
+				<mx:DataGridColumn dataField="safety" headerText="Safety" width="75"/>
+			</mx:columns>
+		</mx:DataGrid>
+		<s:Label id="pointsLabel" text="Project Points:"/>
+		<mx:DataGrid id="dgResultsMeasure" rowCount="1"  dataProvider="{attributesCollection}">
+			<mx:columns>
+				<mx:DataGridColumn dataField="lospt" headerText="LOS"/>
+				<mx:DataGridColumn dataField="adtpt" headerText="ADT"/>
+				<mx:DataGridColumn dataField="truckadtpt" headerText="Truck ADT"/>
+				<mx:DataGridColumn dataField="roadwayclasspt" headerText="Roadway Class"/>
+				<mx:DataGridColumn dataField="safetypt" headerText="Safety"/>
+			</mx:columns>
+		</mx:DataGrid>
+		<s:Label id="EJLabel" text="Environmental Justice:"/>
+		<mx:DataGrid id="dgResultsEJ" rowCount="1"  dataProvider="{attributesCollection}">
+			<mx:columns>
+				<mx:DataGridColumn dataField="disabledt" headerText="Disabled"/>
+				<mx:DataGridColumn dataField="elderlyt" headerText="Elderly"/>
+				<mx:DataGridColumn dataField="minorityt" headerText="Minority"/>
+				<mx:DataGridColumn dataField="povertyt" headerText="Poverty"/>
+				<mx:DataGridColumn dataField="zerocart" headerText="Zero Car"/>
+			</mx:columns>
+		</mx:DataGrid>
+	</viewer:WidgetTemplate>
+	
+</viewer:BaseWidget>
+
